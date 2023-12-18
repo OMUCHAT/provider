@@ -1,5 +1,6 @@
 import asyncio
 import time
+import traceback
 import typing
 from typing import Callable, Dict
 
@@ -48,11 +49,10 @@ class Tasks:
                 for listener in self.listeners:
                     self.loop.create_task(listener.on_task_success(name))
             except Exception as e:
-                logger.error(f"Task {name} failed")
-                logger.error(e)
                 for listener in self.listeners:
                     self.loop.create_task(listener.on_task_fail(name))
-                raise e
+                traceback.print_exc()
+                raise Exception(f"Task {name} failed") from e
             finally:
                 logger.info(f"Finished task {name}")
                 self.times[name] = time.time() - self.times_start[name]

@@ -1,14 +1,14 @@
-import time
+from typing import Callable
 
 from loguru import logger
 from omuchat import App, Channel, Client, events
-from omuchat.model import Author, Message, TextContent
+from omuchat.model import Message
 
 from .provider import ProviderService
 from .services import SERVICES
 
 APP = App(
-    name="chatprovider",
+    name="builtin-provider",
     group="omu",
     description="Chat provider for Omu",
     version="0.1.0",
@@ -17,6 +17,11 @@ APP = App(
     repository_url="https://github.com/OMUCHAT/provider",
 )
 client = Client(APP)
+
+
+def instance[T](cls: Callable[[], T]) -> T:
+    return cls()
+
 
 services = {}
 for service_cls in SERVICES:
@@ -35,8 +40,11 @@ async def on_channel_create(channel: Channel):
     if service is None:
         return
     if channel.active:
-        await service.start_channel(channel)
-        logger.info(f"Channel {channel.url} activated")
+        try:
+            await service.start_channel(channel)
+            logger.info(f"Channel {channel.url} activated")
+        except Exception as e:
+            logger.error(f"Failed to activate channel {channel.url}: {e}")
 
 
 @client.on(events.ChannelDelete)
@@ -56,7 +64,11 @@ async def on_channel_update(channel: Channel):
         return
     if channel.active:
         await service.start_channel(channel)
-        logger.info(f"Channel {channel.url} activated")
+        try:
+            await service.start_channel(channel)
+            logger.info(f"Channel {channel.url} activated")
+        except Exception as e:
+            logger.error(f"Failed to activate channel {channel.url}: {e}")
     else:
         await service.stop_channel(channel)
         logger.info(f"Channel {channel.url} deactivated")
@@ -68,29 +80,17 @@ def get_provider(channel: Channel) -> ProviderService | None:
     return services[channel.provider_id]
 
 
-async def send_test_message():
-    await client.messages.add(
-        Message(
-            room_id="test",
-            id=f"test-{time.time_ns()}",
-            content=TextContent.of("Hello, world!"),
-            author=Author(
-                id="tester",
-                name="tester",
-                avatar_url="https://avatars.githubusercontent.com/u/73367700?v=4",
-                roles=[],
-            ),
-        )
-    )
-
-
 async def start_channels():
     async for channel in client.channels.iter():
         service = get_provider(channel)
         if service is None:
             continue
         if channel.active:
-            await service.start_channel(channel)
+            try:
+                await service.start_channel(channel)
+                logger.info(f"Channel {channel.url} activated")
+            except Exception as e:
+                logger.error(f"Failed to activate channel {channel.url}: {e}")
             logger.info(f"Channel {channel.url} activated")
 
 
@@ -98,7 +98,6 @@ async def start_channels():
 async def on_ready():
     await register_services()
     await start_channels()
-    await send_test_message()
     logger.info("Ready!")
 
 

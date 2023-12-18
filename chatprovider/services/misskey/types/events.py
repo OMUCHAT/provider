@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Callable, Dict, Literal, TypedDict
 
 from .api import Note
@@ -22,6 +23,9 @@ class Event[Type: str, Body]:
             "type": self.type,
             "body": body,
         }
+
+    def json(self, body: Body) -> str:
+        return json.dumps(self.create(body))
 
     def __call__(self, body: EventJson[Type, Body]) -> Body | None:
         if body["type"] != self.type:
@@ -65,6 +69,11 @@ class Connect(TypedDict):
     channel: str
     id: str
     params: ConnectParams
+
+
+@event("disconnect")
+class Disconnect(TypedDict):
+    id: str
 
 
 @event("channel")
