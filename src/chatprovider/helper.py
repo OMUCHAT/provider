@@ -1,11 +1,29 @@
+import json
 import re
 import time
 from typing import Callable, Coroutine
 
+import aiohttp
 from loguru import logger
+from omuchat import Provider
 
 HTTP_REGEX = r"(https?://)?(www\.)?"
 URL_NORMALIZE_REGEX = r"(?P<protocol>https?)?:?\/?\/?(?P<domain>[^.]+\.[^\/]+)(?P<path>[^?#]+)?(?P<query>.+)?"
+
+
+def get_session(provider: Provider) -> aiohttp.ClientSession:
+    user_agent = json.dumps(
+        [
+            "OmuChat",
+            {
+                "id": provider.id,
+                "version": provider.version,
+                "repository_url": provider.repository_url,
+            },
+        ]
+    )
+    session = aiohttp.ClientSession(headers={"User-Agent": user_agent})
+    return session
 
 
 def normalize_url(url: str) -> str:

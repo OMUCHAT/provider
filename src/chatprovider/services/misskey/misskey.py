@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
-import json
 import re
 import time
 from typing import Dict, List
 
-from loguru import logger
+import aiohttp
+from aiohttp import web
+from chatprovider.helper import get_session
+
 from omuchat import ImageContent, Role
 from omuchat.client import Client
 from omuchat.model import (
@@ -19,7 +20,6 @@ from omuchat.model import (
     RootContent,
     TextContent,
 )
-from websockets import client, exceptions
 
 from ...provider import ProviderService
 from ...tasks import Tasks
@@ -34,13 +34,13 @@ INFO = Provider(
     description="Misskey provider",
     regex=r"(?P<host>[\w\.]+\.\w+)(/channels/(?P<channel>[^/]+))?/?",
 )
-session = INFO.get_session()
+session = get_session(INFO)
 
 
 class MisskeyService(ProviderService):
     def __init__(self, client: Client):
         self.client = client
-        self.rooms: dict[str, MisskeyRoomService] = {}
+        self.rooms: Dict[str, MisskeyRoomService] = {}
 
     @property
     def info(self) -> Provider:
@@ -146,11 +146,14 @@ class MisskeyRoomService:
         cls, client: Client, channel: Channel, host: str, channel_id: str | None = None
     ):
         instance = await MisskeyInstance.create(client, host)
+        meta = instance.meta
         room = Room(
             id=channel_id or "homeTimeline",
             provider_id=INFO.key(),
             channel_id=channel_id,
-            name=f"Misskey {channel_id or 'homeTimeline'}",
+            image_url=meta["backgroundImageUrl"],
+            name=meta["name"],
+            description=meta["description"],
             online=False,
             url=f"https://{host}/",
         )
@@ -182,28 +185,23 @@ class MisskeyRoomService:
 
     async def start(self):
         while True:
-            try:
-                socket = await self.create_socket()
-                await self.connect(socket)
-                self.room.online = True
-                await self.client.rooms.update(self.room)
-                await self.listen(socket)
-            except exceptions.ConnectionClosed:
-                logger.warning("Misskey socket closed")
-                continue
+            socket = await self.create_socket()
+            await self.connect(socket)
+            self.room.online = True
+            await self.client.rooms.update(self.room)
+            await self.listen(socket)
             self.room.online = False
             await self.client.rooms.update(self.room)
 
     async def create_socket(self):
-        socket = await client.connect(
-            f"wss://{self.instance.host}/streaming?_t={time.time() * 1000}&i=Ea7ZpQdHnO8LISib",
-            extra_headers=session.headers,
+        socket = await session.ws_connect(
+            f"wss://{self.instance.host}/streaming?_t={time.time() * 1000}",
         )
         return socket
 
-    async def connect(self, socket: client.WebSocketClientProtocol):
-        await socket.send(
-            events.Connect.json(
+    async def connect(self, socket: aiohttp.ClientWebSocketResponse):
+        await socket.send_json(
+            events.Connect.create(
                 {
                     "channel": "localTimeline",
                     "id": self.room.key(),
@@ -215,17 +213,18 @@ class MisskeyRoomService:
             )
         )
 
-    async def listen(self, socket: client.WebSocketClientProtocol):
+    async def listen(self, socket: aiohttp.ClientWebSocketResponse):
         while True:
-            message = await socket.recv()
-            data = json.loads(message)
+            message = await socket.receive()
+            if message.type == web.WSMsgType.CLOSED:
+                break
+            if message.type == web.WSMsgType.ERROR:
+                break
+            if message.type == web.WSMsgType.CLOSE:
+                break
+            data = message.json()
             if event := self.validate_event(data):
                 await self.process_message(event)
-
-    async def ping(self, socket):
-        while True:
-            await socket.send("h")
-            await asyncio.sleep(30)
 
     def validate_event(self, data: events.EventJson) -> events.EventJson | None:
         if "type" not in data:

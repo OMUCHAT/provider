@@ -1,5 +1,5 @@
 [project]
-name = "provider"
+name = "chatprovider"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
@@ -18,8 +18,7 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = [
-]
+dev-dependencies = []
 
 [tool.hatch.metadata]
 allow-direct-references = true

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Callable, Dict, Literal, TypedDict
 
 from .api import Note
@@ -24,9 +23,6 @@ class Event[Type: str, Body]:
             "body": body,
         }
 
-    def json(self, body: Body) -> str:
-        return json.dumps(self.create(body))
-
     def __call__(self, body: EventJson[Type, Body]) -> Body | None:
         if body["type"] != self.type:
             return None
@@ -41,13 +37,13 @@ class Event[Type: str, Body]:
 EVENTS: Dict[str, Event] = {}
 
 
-def event[Type: str, Body](
-    type: Type
-) -> Callable[[Callable[[Body], Body]], Event[Type, Body]]:
-    def decorator(cls: Callable[[Body], Body]) -> Event[Type, Body]:
-        def _validate(body: Body) -> bool:
+def event[Type: str, **P, Body](
+    type: Type,
+) -> Callable[[Callable[P, Body]], Event[Type, Body]]:
+    def decorator(cls: Callable[P, Body]) -> Event[Type, Body]:
+        def _validate(*args: P.args, **kwargs: P.kwargs) -> bool:
             try:
-                cls(body)
+                cls(*args, **kwargs)
             except Exception:
                 return False
             return True

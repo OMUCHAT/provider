@@ -30,7 +30,7 @@ for service_cls in SERVICES:
 
 
 async def register_services():
-    for key, service in services.items():
+    for service in services.values():
         await client.providers.add(service.info)
 
 
@@ -104,7 +104,5 @@ async def on_ready():
 @client.on(events.MessageCreate)
 async def on_message_create(message: Message):
     print(f"Message created: {message.text}")
-
-
-if __name__ == "__main__":
-    client.run()
+    for gift in message.gifts:
+        print(f"Gift: {gift.name} x{gift.amount}")

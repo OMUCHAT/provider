@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, List
 
 import bs4
+
 from omuchat import Paid
 from omuchat.client import Client
 from omuchat.model import (
@@ -24,7 +25,7 @@ from omuchat.model import (
     TextContent,
 )
 
-from ...helper import HTTP_REGEX
+from ...helper import HTTP_REGEX, get_session
 from ...provider import ProviderService
 from ...tasks import Tasks
 from .types import api
@@ -39,13 +40,13 @@ INFO = Provider(
     regex=HTTP_REGEX
     + r"((m\.)?youtube\.com\/(watch\?v=(?P<video_id>[\w_-]+|))|youtu\.be\/(?P<video_id_short>[\w-]+))",
 )
-session = INFO.get_session()
+session = get_session(INFO)
 
 
 class YoutubeService(ProviderService):
     def __init__(self, client: Client):
         self.client = client
-        self.rooms: dict[str, YoutubeRoomService] = {}
+        self.rooms: Dict[str, YoutubeRoomService] = {}
 
     @property
     def info(self) -> Provider:
