@@ -5,10 +5,9 @@ from omuchat import App, Channel, Client, events
 from omuchat.model import Message
 
 from .provider import ProviderService
-from .services import SERVICES
 
 APP = App(
-    name="builtin-provider",
+    name="chatprovider",
     group="omu",
     description="Chat provider for Omu",
     version="0.1.0",
@@ -16,17 +15,27 @@ APP = App(
     license="MIT",
     repository_url="https://github.com/OMUCHAT/provider",
 )
+
+
 client = Client(APP)
+
+
+services = {}
+
+
+def load_services():
+    from .services import SERVICES
+
+    for service_cls in SERVICES:
+        service = service_cls(client)
+        services[service.info.key()] = service
+
+
+load_services()
 
 
 def instance[T](cls: Callable[[], T]) -> T:
     return cls()
-
-
-services = {}
-for service_cls in SERVICES:
-    service = service_cls(client)
-    services[service.info.key()] = service
 
 
 async def register_services():
@@ -104,5 +113,5 @@ async def on_ready():
 @client.on(events.MessageCreate)
 async def on_message_create(message: Message):
     print(f"Message created: {message.text}")
-    for gift in message.gifts:
+    for gift in message.gifts or []:
         print(f"Gift: {gift.name} x{gift.amount}")

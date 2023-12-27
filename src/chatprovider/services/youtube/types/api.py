@@ -41,7 +41,7 @@ class InvalidationContinuationData(TypedDict):
 
 
 class Continuation(TypedDict):
-    invalidationContinuationData: InvalidationContinuationData
+    invalidationContinuationData: NotRequired[InvalidationContinuationData]
 
 
 class TextRun(TypedDict):
@@ -248,6 +248,42 @@ class ContinuationContents(TypedDict):
     liveChatContinuation: LiveChatContinuation
 
 
+class Reaction(TypedDict):
+    key: str
+    value: int
+
+
+class ReactionData(TypedDict):
+    unicodeEmojiId: str
+    reactionCount: int
+
+
+class ReactionBucket(TypedDict):
+    reactions: NotRequired[List[Reaction]]
+    reactionsData: NotRequired[List[ReactionData]]
+
+
+class EmojiFountainDataEntity(TypedDict):
+    reactionBuckets: List[ReactionBucket]
+
+
+class Payload(TypedDict):
+    emojiFountainDataEntity: NotRequired[EmojiFountainDataEntity]
+
+
+class Mutation(TypedDict):
+    payload: Payload
+
+
+class EntityBatchUpdate(TypedDict):
+    mutations: List[Mutation]
+
+
+class FrameworkUpdates(TypedDict):
+    entityBatchUpdate: EntityBatchUpdate
+
+
 class Response(TypedDict):
     responseContext: ResponseContext
     continuationContents: ContinuationContents
+    frameworkUpdates: NotRequired[FrameworkUpdates]  # reactions

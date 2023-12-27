@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from collections import Counter
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, TypedDict
 
 import bs4
-
 from omuchat import Paid
 from omuchat.client import Client
 from omuchat.model import (
@@ -25,6 +25,7 @@ from omuchat.model import (
     TextContent,
 )
 
+from ...chatprovider import client
 from ...helper import HTTP_REGEX, get_session
 from ...provider import ProviderService
 from ...tasks import Tasks
@@ -41,6 +42,14 @@ INFO = Provider(
     + r"((m\.)?youtube\.com\/(watch\?v=(?P<video_id>[\w_-]+|))|youtu\.be\/(?P<video_id_short>[\w-]+))",
 )
 session = get_session(INFO)
+
+
+class ReactionEvent(TypedDict):
+    room_id: str
+    reactions: Dict[str, int]
+
+
+REACTION = client.omu.message.register("youtube-reaction", ReactionEvent)
 
 
 class YoutubeService(ProviderService):
@@ -133,7 +142,7 @@ class YoutubeChat:
                 "context": {
                     "client": {
                         "clientName": "WEB",
-                        "clientVersion": "2.20210511.07.00",
+                        "clientVersion": "2.20230622.06.00",
                     }
                 },
                 "continuation": self.continuation,
@@ -158,9 +167,10 @@ class YoutubeChat:
         )
         if continuations is None:
             return data
-        self.continuation = continuations[0]["invalidationContinuationData"][
-            "continuation"
-        ]
+        continuation = continuations[0]
+        if "invalidationContinuationData" not in continuation:
+            return data
+        self.continuation = continuation["invalidationContinuationData"]["continuation"]
         return data
 
 
@@ -212,6 +222,7 @@ class YoutubeRoomService:
                     await self.process_deleted_item(
                         action["markChatItemAsDeletedAction"]
                     )
+            await self.process_reactions(data)
             await asyncio.sleep(1 / 3)
         await self.stop()
 
@@ -255,6 +266,33 @@ class YoutubeRoomService:
         )
         if message:
             await self.client.messages.remove(message)
+
+    async def process_reactions(self, data: api.Response):
+        if "frameworkUpdates" not in data:
+            return
+        reactions: Counter[str] = Counter()
+        for update in data["frameworkUpdates"]["entityBatchUpdate"]["mutations"]:
+            if "payload" not in update:
+                continue
+            payload = update["payload"]
+            if "emojiFountainDataEntity" not in payload:
+                continue
+            emoji = payload["emojiFountainDataEntity"]
+            for bucket in emoji["reactionBuckets"]:
+                for reaction in bucket.get("reactions", []):
+                    reactions[reaction["key"]] += reaction["value"]
+                for reaction in bucket.get("reactionsData", []):
+                    reactions[reaction["unicodeEmojiId"]] += reaction["reactionCount"]
+        if len(reactions) == 0:
+            return
+        print(reactions)
+        await self.client.omu.message.broadcast(
+            REACTION,
+            ReactionEvent(
+                room_id=self.room.key(),
+                reactions=dict(reactions),
+            ),
+        )
 
     def _parse_author(self, message: api.LiveChatMessageRenderer) -> Author:
         author = message.get("authorName", {}).get("simpleText")
