@@ -39,7 +39,7 @@ INFO = Provider(
     repository_url="https://github.com/OMUCHAT/provider",
     description="Youtube provider",
     regex=HTTP_REGEX
-    + r"((m\.)?youtube\.com\/(watch\?v=(?P<video_id>[\w_-]+|))|youtu\.be\/(?P<video_id_short>[\w-]+))",
+    + r"(youtu\.be\/(?P<video_id_short>[\w-]+))|(m\.)?youtube\.com\/(watch\?v=(?P<video_id>[\w_-]+|)|@(?P<channel_id_vanity>[\w_-]+|)|channel\/(?P<channel_id>[\w_-]+|)|user\/(?P<channel_id_user>[\w_-]+|)|c\/(?P<channel_id_c>[\w_-]+|))",
 )
 session = get_session(INFO)
 
@@ -64,15 +64,85 @@ class YoutubeService(ProviderService):
     async def start_channel(self, channel: Channel):
         if channel.url in self.rooms:
             return
-        match = re.match(INFO.regex, channel.url)
+        match = re.search(INFO.regex, channel.url)
         if match is None:
             raise RuntimeError("Could not match url")
         options = match.groupdict()
+
         video_id = options.get("video_id") or options.get("video_id_short")
         if video_id is None:
-            raise RuntimeError("Could not find video_id")
+            channel_id = options.get("channel_id") or await self.channel_id_from_vanity(
+                options.get("channel_id_vanity")
+                or options.get("channel_id_user")
+                or options.get("channel_id_c")
+            )
+            if channel_id is None:
+                raise RuntimeError("Could not find channel id")
+            video_id = await self.video_id_from_channel(channel_id)
+            if video_id is None:
+                raise RuntimeError("Could not find video id")
+
         room = await YoutubeRoomService.create(self.client, channel, video_id)
         self.rooms[channel.url] = room
+
+    async def channel_id_from_vanity(self, vanity: str | None) -> str | None:
+        if vanity is None:
+            return None
+        vanity_id = re.sub(r"[^a-zA-Z0-9_-]", "", vanity)
+        if not vanity_id:
+            return None
+        res = await session.get(f"https://www.youtube.com/@{vanity_id}")
+        soup = bs4.BeautifulSoup(await res.text(), "html.parser")
+        meta = soup.select_one('meta[itemprop="identifier"]')
+        if meta is None:
+            return None
+        return meta.attrs.get("content")
+
+    async def video_id_from_channel(self, channel_id: str) -> str | None:
+        res = await session.get(
+            f"https://www.youtube.com/embed/live_stream?channel={channel_id}",
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"
+                )
+            },
+        )
+        soup = bs4.BeautifulSoup(await res.text(), "html.parser")
+        link = soup.select_one('link[rel="canonical"]')
+        if link is None:
+            return await self.video_id_from_channel_feeds(channel_id)
+        href = link.attrs.get("href")
+        if href is None:
+            return None
+        match = re.match(INFO.regex, href)
+        if match is None:
+            return None
+        options = match.groupdict()
+        return options.get("video_id") or options.get("video_id_short")
+
+    async def video_id_from_channel_feeds(self, channel_id: str) -> str | None:
+        res = await session.get(
+            f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}",
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"
+                )
+            },
+        )
+        soup = bs4.BeautifulSoup(await res.text(), "html.parser")
+        link = soup.select_one("entry link")
+        if link is None:
+            return None
+        href = link.attrs.get("href")
+        if href is None:
+            return None
+        match = re.search(INFO.regex, href)
+        if match is None:
+            return None
+        options = match.groupdict()
+        return options.get("video_id") or options.get("video_id_short")
 
     async def stop_channel(self, channel: Channel):
         if channel.url not in self.rooms:
@@ -285,7 +355,6 @@ class YoutubeRoomService:
                     reactions[reaction["unicodeEmojiId"]] += reaction["reactionCount"]
         if len(reactions) == 0:
             return
-        print(reactions)
         await self.client.omu.message.broadcast(
             REACTION,
             ReactionEvent(

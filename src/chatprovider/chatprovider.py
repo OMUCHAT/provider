@@ -1,14 +1,15 @@
 from typing import Callable
 
 from loguru import logger
+
 from omuchat import App, Channel, Client, events
 from omuchat.model import Message
 
 from .provider import ProviderService
 
 APP = App(
-    name="chatprovider",
-    group="omu",
+    name="provider",
+    group="omu.chat",
     description="Chat provider for Omu",
     version="0.1.0",
     authors=["omu"],
