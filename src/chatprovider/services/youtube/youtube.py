@@ -115,7 +115,7 @@ class YoutubeService(ProviderService):
         href = link.attrs.get("href")
         if href is None:
             return None
-        match = re.match(INFO.regex, href)
+        match = re.search(INFO.regex, href)
         if match is None:
             return None
         options = match.groupdict()
@@ -131,7 +131,7 @@ class YoutubeService(ProviderService):
                 )
             },
         )
-        soup = bs4.BeautifulSoup(await res.text(), "html.parser")
+        soup = bs4.BeautifulSoup(await res.text(), "xml")
         link = soup.select_one("entry link")
         if link is None:
             return None

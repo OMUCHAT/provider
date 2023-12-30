@@ -1,7 +1,6 @@
 from typing import Callable
 
 from loguru import logger
-
 from omuchat import App, Channel, Client, events
 from omuchat.model import Message
 
@@ -91,7 +90,7 @@ def get_provider(channel: Channel) -> ProviderService | None:
 
 
 async def start_channels():
-    async for channel in client.channels.iter():
+    for channel in (await client.channels.fetch()).values():
         service = get_provider(channel)
         if service is None:
             continue
