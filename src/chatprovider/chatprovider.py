@@ -1,3 +1,5 @@
+import asyncio
+import time
 from typing import Callable
 
 from loguru import logger
@@ -103,10 +105,17 @@ async def start_channels():
             logger.info(f"Channel {channel.url} activated")
 
 
+async def recheck_task():
+    while True:
+        await start_channels()
+        await asyncio.sleep(15 - time.time() % 15)
+
+
 @client.on(events.Ready)
 async def on_ready():
     await register_services()
     await start_channels()
+    asyncio.create_task(recheck_task())
     logger.info("Ready!")
 
 

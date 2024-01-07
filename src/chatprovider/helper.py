@@ -5,6 +5,7 @@ from typing import Callable, Coroutine
 
 import aiohttp
 from loguru import logger
+
 from omuchat import Provider
 
 HTTP_REGEX = r"(https?://)?(www\.)?"
@@ -44,7 +45,7 @@ def timeit[**P, R](func: Callable[P, R]) -> Callable[P, R]:
 
 
 def timeit_async[**P, R](
-    func: Callable[P, Coroutine[None, None, R]]
+    func: Callable[P, Coroutine[None, None, R]],
 ) -> Callable[P, Coroutine[None, None, R]]:
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         start = time.time()
